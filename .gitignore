@@ -1,0 +1,19 @@
+# Mac
+.DS_Store
+
+# Backend
+backend/__pycache__/
+backend/.env
+backend/client_secret.json
+backend/venv/
+backend/env/
+backend/*.pyc
+
+# Local Data / Secrets
+memory/
+!memory/.keep
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env

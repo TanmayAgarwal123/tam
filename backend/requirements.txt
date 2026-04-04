@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+anthropic
+python-dotenv
+pydantic
+sse-starlette
+elevenlabs
+deepgram-sdk
+python-multipart
+apscheduler
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+slack-sdk
