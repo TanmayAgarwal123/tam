@@ -7,6 +7,7 @@ Tam is a voice-first personal AI built on Claude Haiku, designed to act on your 
 **[Live Demo](https://tam-ai.vercel.app)** · **[Portfolio Page](https://tanmayresume.com)** · **[Watch the Demo Video](#)**
 
 ---
+
 To always run TAM properly:- 
 # Terminal 1 — Backend
 cd "tam/backend" && uvicorn main:app --reload
