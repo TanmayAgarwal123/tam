@@ -35,6 +35,7 @@ export default function App() {
   // Voice Mode Loop States
   const [voiceModeActive, setVoiceModeActive] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [statusFlash, setStatusFlash] = useState<'none' | 'urgent' | 'proactive'>('none');
   
   const voiceModeRef = useRef(voiceModeActive);
   const lastSpokenMessageId = useRef<string | null>(null);
@@ -198,8 +199,9 @@ export default function App() {
     }
   }, [sessionId]);
 
-  const submitToSpeak = async (text: string) => {
-    if (!voiceModeActive) return;
+  const submitToSpeak = async (text: string, force = false) => {
+    if (!force && isMuted) return;
+    if (!force && !voiceModeActive) return;
     try {
       const resp = await fetch('http://localhost:8000/speak', {
         method: 'POST',
@@ -240,14 +242,31 @@ export default function App() {
 
   useEffect(() => {
     const eventsSource = new EventSource('http://localhost:8000/events');
-    eventsSource.onmessage = (event) => {
+    
+    eventsSource.addEventListener('proactive', (event: MessageEvent) => {
         try {
             const data = JSON.parse(event.data);
             if (data.autoSpeak && data.text) {
-                submitToSpeak(data.text);
+                // Proactive events always speak (briefings, reminders) regardless of voice mode
+                submitToSpeak(data.text, true);
+                // Show notification in chat
+                const notifId = uuidv4();
+                setMessages(prev => [...prev, {
+                  id: notifId,
+                  role: 'assistant',
+                  content: data.text
+                }]);
+            }
+            if (data.urgent) {
+                setStatusFlash('urgent');
+                setTimeout(() => setStatusFlash('none'), 3000);
+            } else if (data.type === 'morning_briefing' || data.type === 'nightly_sync') {
+                setStatusFlash('proactive');
+                setTimeout(() => setStatusFlash('none'), 2000);
             }
         } catch (e) {}
-    };
+    });
+    
     return () => eventsSource.close();
   }, [voiceModeActive]);
 
@@ -291,6 +310,7 @@ export default function App() {
           voiceModeActive={voiceModeActive}
           onToggleVoiceMode={toggleVoiceMode}
           moodColor={mood}
+          statusFlash={statusFlash}
         />
         
         <main className="flex-1 overflow-hidden relative">

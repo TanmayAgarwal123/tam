@@ -8,11 +8,17 @@ interface StatusBarProps {
   voiceModeActive: boolean;
   onToggleVoiceMode: () => void;
   moodColor?: string;
+  statusFlash?: 'none' | 'urgent' | 'proactive';
 }
 
-export default function StatusBar({ isThinking, lastMemoryUpdate, isMuted, onToggleMute, voiceModeActive, onToggleVoiceMode, moodColor = "bg-green-500" }: StatusBarProps) {
+export default function StatusBar({ isThinking, lastMemoryUpdate, isMuted, onToggleMute, voiceModeActive, onToggleVoiceMode, moodColor = "bg-green-500", statusFlash = 'none' }: StatusBarProps) {
+  const flashBorder = statusFlash === 'urgent' 
+    ? 'border-b-red-500 shadow-[0_2px_12px_rgba(239,68,68,0.6)]'
+    : statusFlash === 'proactive'
+    ? 'border-b-emerald-500 shadow-[0_2px_12px_rgba(16,185,129,0.4)]'
+    : '';
   return (
-    <div className="h-12 border-b border-[var(--color-glass-border)] glass-panel flex items-center justify-between px-6 shrink-0 z-10 w-full">
+    <div className={`h-12 border-b border-[var(--color-glass-border)] glass-panel flex items-center justify-between px-6 shrink-0 z-10 w-full transition-all duration-300 ${flashBorder}`}>
       <div className="flex items-center gap-3">
         <div className="relative flex items-center justify-center w-6 h-6 rounded-md bg-[var(--color-core-accent)]/20 text-[var(--color-core-accent)] border border-[var(--color-core-accent)]/30">
           <Cpu size={14} className={isThinking ? 'animate-pulse' : ''} />

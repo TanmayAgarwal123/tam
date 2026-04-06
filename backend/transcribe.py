@@ -1,4 +1,4 @@
-import os
+import os, asyncio
 from fastapi import APIRouter, File, UploadFile
 from deepgram import DeepgramClient, PrerecordedOptions
 
@@ -24,10 +24,13 @@ async def transcribe(audio: UploadFile = File(...)):
             "ElevenLabs:2", "Deepgram:2", "FastAPI:2"
         ]
     )
-    try:
-        response = client.listen.rest.v("1").transcribe_buffer(
+    def do_transcribe():
+        return client.listen.rest.v("1").transcribe_buffer(
             {"buffer": audio_data}, options
         )
+
+    try:
+        response = await asyncio.to_thread(do_transcribe)
         transcript = response.results.channels[0].alternatives[0].transcript
         return {"transcript": transcript}
     except Exception as e:

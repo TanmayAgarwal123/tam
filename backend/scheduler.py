@@ -9,6 +9,8 @@ import gmail_tools
 
 client = anthropic.AsyncAnthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
+ANTHROPIC_TIMEOUT = 20.0
+
 _queue = None
 
 def start_scheduler(queue: asyncio.Queue):
@@ -21,16 +23,20 @@ def start_scheduler(queue: asyncio.Queue):
     scheduler.start()
     print("[STARTUP] Scheduler running — briefing at 7:30AM, sync at 10PM")
 
-def read_json(path):
+async def read_json(path):
     try:
-        with open(path, "r") as f:
-            return json.load(f)
+        def _read():
+            with open(path, "r") as f:
+                return json.load(f)
+        return await asyncio.to_thread(_read)
     except:
         return []
 
-def write_json(path, data):
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
+async def write_json(path, data):
+    def _write():
+        with open(path, "w") as f:
+            json.dump(data, f, indent=2)
+    await asyncio.to_thread(_write)
 
 def get_base_dir():
     return os.path.join(os.path.dirname(__file__), "..")
@@ -43,20 +49,20 @@ def get_memory_truncated():
             content = f.read()
     except: pass
     if len(content) > 4000:
-        return content[:4000] + "\\n[...memory truncated for token efficiency]"
+        return content[:4000] + "\n[...memory truncated for token efficiency]"
     return content
 
 async def compile_morning_briefing():
     memory = get_memory_truncated()
-    try: calendar_data = calendar_tools.get_today_events()
+    try: calendar_data = await asyncio.to_thread(calendar_tools.get_today_events)
     except: calendar_data = "Calendar not connected"
-    try: email_data = gmail_tools.read_emails(max_results=5, query="is:unread")
+    try: email_data = await asyncio.to_thread(gmail_tools.read_emails, max_results=5, query="is:unread")
     except: email_data = "Gmail not connected"
     
-    tasks = read_json(os.path.join(get_base_dir(), "memory", "tasks.json"))
+    tasks = await read_json(os.path.join(get_base_dir(), "memory", "tasks.json"))
     high_priority = [t for t in tasks if t.get("priority") == "high" and not t.get("completed")]
     
-    habits = read_json(os.path.join(get_base_dir(), "memory", "habits.json"))
+    habits = await read_json(os.path.join(get_base_dir(), "memory", "habits.json"))
     yesterday = (datetime.now() - timedelta(days=1)).date().isoformat()
     yesterday_habits = [h for h in habits if h.get("date") == yesterday]
     
@@ -79,14 +85,20 @@ Voice format only — no markdown, no bullets, natural speech.
 Start with: "Good morning Tanmay. Here's your day."
 Be direct. Be Tam."""
     
-    response = await client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=300,
-        system="You are Tam. Generate the morning briefing.",
-        messages=[{"role": "user", "content": briefing_prompt}]
-    )
-    
-    return next((b.text for b in response.content if hasattr(b, 'text')), "")
+    try:
+        response = await asyncio.wait_for(
+            client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=300,
+                system="You are Tam. Generate the morning briefing.",
+                messages=[{"role": "user", "content": briefing_prompt}]
+            ),
+            timeout=ANTHROPIC_TIMEOUT
+        )
+        return next((b.text for b in response.content if hasattr(b, 'text')), "")
+    except Exception as e:
+        print(f"[SCHEDULER] Briefing failed: {e}")
+        return "I couldn't compile your briefing right now, but your schedule is ready on the dashboard."
 
 async def scheduled_morning_briefing():
     global _queue
@@ -99,9 +111,9 @@ async def nightly_sync():
     if not _queue: return
     
     base = get_base_dir()
-    tasks = read_json(os.path.join(base, "memory", "tasks.json"))
-    workouts = read_json(os.path.join(base, "memory", "workouts.json"))
-    study = read_json(os.path.join(base, "memory", "study_log.json"))
+    tasks = await read_json(os.path.join(base, "memory", "tasks.json"))
+    workouts = await read_json(os.path.join(base, "memory", "workouts.json"))
+    study = await read_json(os.path.join(base, "memory", "study_log.json"))
     
     today = datetime.now().date().isoformat()
     today_workouts = [w for w in workouts if w.get("date","").startswith(today)]
@@ -123,22 +135,27 @@ Give a brief spoken wrap-up under 100 words:
 
 Voice format. No markdown. Be Tam."""
 
-    response = await client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=200,
-        system="You are Tam delivering the nightly sync.",
-        messages=[{"role": "user", "content": sync_prompt}]
-    )
-    
-    text = next((b.text for b in response.content if hasattr(b, 'text')), "")
-    await _queue.put({"event": "proactive", "data": json.dumps({"type": "nightly_sync", "text": text, "autoSpeak": True})})
+    try:
+        response = await asyncio.wait_for(
+            client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=200,
+                system="You are Tam delivering the nightly sync.",
+                messages=[{"role": "user", "content": sync_prompt}]
+            ),
+            timeout=ANTHROPIC_TIMEOUT
+        )
+        text = next((b.text for b in response.content if hasattr(b, 'text')), "")
+        await _queue.put({"event": "proactive", "data": json.dumps({"type": "nightly_sync", "text": text, "autoSpeak": True})})
+    except Exception as e:
+        print(f"[SCHEDULER] Nightly sync failed: {e}")
 
 async def check_reminders():
     global _queue
     if not _queue: return
     
     path = os.path.join(get_base_dir(), "memory", "reminders.json")
-    reminders = read_json(path)
+    reminders = await read_json(path)
     now = datetime.now().timestamp()
     updated = False
     
@@ -157,4 +174,4 @@ async def check_reminders():
             })
             
     if updated:
-        write_json(path, reminders)
+        await write_json(path, reminders)

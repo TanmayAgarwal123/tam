@@ -92,16 +92,20 @@ MEALS_FILE = os.path.join(BASE_MEM_DIR, "meals.json")
 STUDY_LOG_FILE = os.path.join(BASE_MEM_DIR, "study_log.json")
 RESEARCH_NOTES_FILE = os.path.join(BASE_MEM_DIR, "research_notes.json")
 
-def read_json(path):
+async def read_json(path):
     try:
-        with open(path, "r") as f:
-            return json.load(f)
+        def _read():
+            with open(path, "r") as f:
+                return json.load(f)
+        return await asyncio.to_thread(_read)
     except:
         return []
 
-def write_json(path, data):
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
+async def write_json(path, data):
+    def _write():
+        with open(path, "w") as f:
+            json.dump(data, f, indent=2)
+    await asyncio.to_thread(_write)
 
 # Section 1 - Cost Tracking
 cost_logger = logging.getLogger("tam-cost")
@@ -109,6 +113,7 @@ logging.basicConfig(level=logging.INFO)
 
 DAILY_SPEND = 0.0
 DAILY_LIMIT = float(os.getenv("DAILY_LIMIT", "0.50"))
+ANTHROPIC_TIMEOUT = 20.0 # prevent infinite hanging
 
 def track_spend(cost: float):
     global DAILY_SPEND
@@ -132,7 +137,7 @@ def log_cost(response):
     )
 
 @app.get("/spend")
-def get_spend():
+async def get_spend():
     return {
         "today": round(DAILY_SPEND, 4),
         "limit": DAILY_LIMIT,
@@ -361,14 +366,16 @@ def calculate_consecutive_streak(habit_target, habits_list):
         else: break
     return streak
 
-def execute_tool(name: str, input_data: dict) -> dict:
+async def execute_tool(name: str, input_data: dict) -> dict:
     hud_ev = None
     res = {}
     
     if name == "update_memory":
         section = input_data["section"]
-        with open(MEMORY_FILE, "a") as f:
-            f.write(f"\n\n## [{section}] Update - {datetime.now().isoformat()[:10]}\n{input_data['content']}")
+        def _append():
+            with open(MEMORY_FILE, "a") as f:
+                f.write(f"\n\n## [{section}] Update - {datetime.now().isoformat()[:10]}\n{input_data['content']}")
+        await asyncio.to_thread(_append)
         invalidate_memory_cache()
         res = {"status": "updated", "section": section}
         hud_ev = {"type": "memory", "section": section}
@@ -377,11 +384,11 @@ def execute_tool(name: str, input_data: dict) -> dict:
         res = get_memory_truncated()
         
     elif name == "set_reminder":
-        reminders = read_json(REMINDERS_FILE)
+        reminders = await read_json(REMINDERS_FILE)
         trigger_at = int(time.time() + (input_data["minutes_from_now"] * 60))
         rem = {"id": str(uuid.uuid4()), "message": input_data["message"], "trigger_at": trigger_at, "fired": False}
         reminders.append(rem)
-        write_json(REMINDERS_FILE, reminders)
+        await write_json(REMINDERS_FILE, reminders)
         
         # Read humans readable
         fires_at = (datetime.now() + timedelta(minutes=input_data["minutes_from_now"])).strftime("%I:%M %p")
@@ -389,7 +396,7 @@ def execute_tool(name: str, input_data: dict) -> dict:
         hud_ev = {"type": "reminder", "reminder": rem}
         
     elif name == "log_habit":
-        habits = read_json(HABITS_FILE)
+        habits = await read_json(HABITS_FILE)
         habit = input_data["habit"]
         entry = {
             "date": datetime.now().isoformat()[:10],
@@ -398,12 +405,12 @@ def execute_tool(name: str, input_data: dict) -> dict:
             "note": input_data.get("note", "")
         }
         habits.append(entry)
-        write_json(HABITS_FILE, habits)
+        await write_json(HABITS_FILE, habits)
         res = {"status": "logged", "habit": habit}
         hud_ev = {"type": "habit", "habit": habit, "streak": calculate_consecutive_streak(habit, habits)}
         
     elif name == "get_habit_streak":
-        habits = read_json(HABITS_FILE)
+        habits = await read_json(HABITS_FILE)
         target = input_data["habit"]
         filtered = [h for h in habits if h.get("habit") == target]
         streak = calculate_consecutive_streak(target, habits)
@@ -412,37 +419,37 @@ def execute_tool(name: str, input_data: dict) -> dict:
         res = {"habit": target, "streak": streak, "completion_rate": pct}
         
     elif name == "log_workout":
-        workouts = read_json(WORKOUTS_FILE)
+        workouts = await read_json(WORKOUTS_FILE)
         entry = {
             "id": str(uuid.uuid4()),
             "date": datetime.now().isoformat()[:10],
             **input_data
         }
         workouts.append(entry)
-        write_json(WORKOUTS_FILE, workouts)
+        await write_json(WORKOUTS_FILE, workouts)
         
         # Call log_habit for gym
-        habits = read_json(HABITS_FILE)
+        habits = await read_json(HABITS_FILE)
         habits.append({"date": datetime.now().isoformat()[:10], "habit": "gym", "status": "done", "note": "Auto-logged from workout"})
-        write_json(HABITS_FILE, habits)
+        await write_json(HABITS_FILE, habits)
         
         res = {"status": "logged", "streak": calculate_consecutive_streak("gym", habits)}
         hud_ev = {"type": "fitness", "workout": entry}
         
     elif name == "suggest_workout":
-        workouts = read_json(WORKOUTS_FILE)
+        workouts = await read_json(WORKOUTS_FILE)
         last_7 = [w for w in workouts[-7:]]
         res = f"Recent workouts: {last_7}. Suggesting push, pull or legs depending on latest logs."
         
     elif name == "log_meal":
-        meals = read_json(MEALS_FILE)
+        meals = await read_json(MEALS_FILE)
         entry = {
             "id": str(uuid.uuid4()),
             "date": datetime.now().isoformat()[:10],
             **input_data
         }
         meals.append(entry)
-        write_json(MEALS_FILE, meals)
+        await write_json(MEALS_FILE, meals)
         
         today = datetime.now().isoformat()[:10]
         today_meals = [m for m in meals if m["date"] == today]
@@ -453,7 +460,7 @@ def execute_tool(name: str, input_data: dict) -> dict:
         hud_ev = {"type": "fitness_meal", "meal": entry}
         
     elif name == "get_nutrition_summary":
-        meals = read_json(MEALS_FILE)
+        meals = await read_json(MEALS_FILE)
         today = datetime.now().isoformat()[:10]
         today_meals = [m for m in meals if m["date"] == today]
         tc = sum(m.get("calories_estimate", 0) for m in today_meals)
@@ -461,14 +468,14 @@ def execute_tool(name: str, input_data: dict) -> dict:
         res = {"calories": tc, "protein": tp, "cal_remaining": 2000 - tc, "protein_remaining": 150 - tp}
         
     elif name == "log_study_session":
-        studies = read_json(STUDY_LOG_FILE)
+        studies = await read_json(STUDY_LOG_FILE)
         entry = {
             "id": str(uuid.uuid4()),
             "date": datetime.now().isoformat()[:10],
             **input_data
         }
         studies.append(entry)
-        write_json(STUDY_LOG_FILE, studies)
+        await write_json(STUDY_LOG_FILE, studies)
         
         today = datetime.now().isoformat()[:10]
         tt = sum(s.get("duration_minutes", 0) for s in studies if s.get("date") == today)
@@ -480,19 +487,19 @@ def execute_tool(name: str, input_data: dict) -> dict:
         hud_ev = {"type": "study", "study": entry}
         
     elif name == "add_research_note":
-        notes = read_json(RESEARCH_NOTES_FILE)
+        notes = await read_json(RESEARCH_NOTES_FILE)
         entry = {"id": str(uuid.uuid4()), "date": datetime.now().isoformat()[:10], **input_data}
         notes.append(entry)
-        write_json(RESEARCH_NOTES_FILE, notes)
+        await write_json(RESEARCH_NOTES_FILE, notes)
         res = {"status": "saved", "total_notes": len(notes)}
         
     elif name == "get_research_notes":
-        notes = read_json(RESEARCH_NOTES_FILE)
+        notes = await read_json(RESEARCH_NOTES_FILE)
         topic = input_data.get("topic", "").lower()
         res = [n for n in notes if topic in n.get("topic", "").lower() or topic in n.get("note", "").lower()]
         
     elif name == "add_task":
-        tasks = read_json(TASKS_FILE)
+        tasks = await read_json(TASKS_FILE)
         tid = str(uuid.uuid4())
         new_task = {
             "id": tid,
@@ -502,13 +509,13 @@ def execute_tool(name: str, input_data: dict) -> dict:
             "completed": False
         }
         tasks.append(new_task)
-        write_json(TASKS_FILE, tasks)
+        await write_json(TASKS_FILE, tasks)
         hp = len([t for t in tasks if t.get("priority") == "high" and not t.get("completed")])
         res = {"status": "added", "task_id": tid, "high_priority_count": hp}
         hud_ev = {"type": "task", "task": new_task}
         
     elif name == "complete_task":
-        tasks = read_json(TASKS_FILE)
+        tasks = await read_json(TASKS_FILE)
         task_name = ""
         for t in tasks:
             if t["id"] == input_data["task_id"]:
@@ -516,7 +523,7 @@ def execute_tool(name: str, input_data: dict) -> dict:
                 t["completed_at"] = datetime.now().isoformat()
                 task_name = t["task"]
                 break
-        write_json(TASKS_FILE, tasks)
+        await write_json(TASKS_FILE, tasks)
         res = {"status": "completed", "task": task_name}
         hud_ev = {"type": "task_completed", "task_id": input_data["task_id"]}
 
@@ -527,41 +534,114 @@ def execute_tool(name: str, input_data: dict) -> dict:
 # Section 2 - History Management
 MAX_HISTORY_TURNS = 6
 
-def load_conversation(session_id: str) -> list:
+def _sanitize_content(content):
+    """Convert Anthropic SDK objects to plain dicts JSON can serialize."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        result = []
+        for block in content:
+            if isinstance(block, dict):
+                result.append(block)
+            elif hasattr(block, 'type'):
+                # Anthropic SDK object — convert to dict
+                if block.type == 'text':
+                    result.append({"type": "text", "text": block.text})
+                elif block.type == 'tool_use':
+                    result.append({
+                        "type": "tool_use",
+                        "id": block.id,
+                        "name": block.name,
+                        "input": block.input
+                    })
+                elif block.type == 'tool_result':
+                    result.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.tool_use_id,
+                        "content": block.content
+                    })
+        return result
+    return content
+
+async def load_conversation(session_id: str) -> list:
     path = os.path.join(CONVERSATIONS_DIR, f"{session_id}.json")
     if not os.path.exists(path):
         return []
-    with open(path) as f:
-        history = json.load(f)
-        
-    stripped = []
-    for i, msg in enumerate(history):
-        if i < len(history) - 2:
-            if isinstance(msg.get("content"), list):
-                text_parts = [
-                    b.get("text", "") for b in msg["content"]
-                    if isinstance(b, dict) and b.get("type") == "text"
-                ]
-                if text_parts:
-                    stripped.append({
-                        "role": msg["role"],
-                        "content": " ".join(text_parts)
-                    })
-            else:
-                stripped.append(msg)
-        else:
-            stripped.append(msg)
+
+    def _load():
+        with open(path) as f:
+            return json.load(f)
             
-    if len(stripped) > MAX_HISTORY_TURNS * 2:
-        stripped = stripped[-(MAX_HISTORY_TURNS * 2):]
+    history = await asyncio.to_thread(_load)
+
+    # Apply sliding window FIRST — trim to last N*2 raw messages
+    if len(history) > MAX_HISTORY_TURNS * 2:
+        history = history[-(MAX_HISTORY_TURNS * 2):]
+
+    # Now strip tool pairs ATOMICALLY from older messages.
+    # Claude requires: if tool_result exists in user msg,
+    # the preceding assistant msg MUST have matching tool_use.
+    # Strategy: keep only plain text turns from old history.
+    # Last 2 pairs (4 messages) are kept fully intact.
+    keep_intact_from = max(0, len(history) - 4)
+    
+    stripped = []
+    i = 0
+    while i < len(history):
+        msg = history[i]
+        if i >= keep_intact_from:
+            # Keep the last 4 messages exactly as-is
+            stripped.append(msg)
+            i += 1
+        else:
+            content = msg.get("content", "")
+            has_tool_use = isinstance(content, list) and any(
+                isinstance(b, dict) and b.get("type") == "tool_use"
+                for b in content
+            )
+            has_tool_result = isinstance(content, list) and any(
+                isinstance(b, dict) and b.get("type") == "tool_result"
+                for b in content
+            )
+            
+            if has_tool_use:
+                # Strip this assistant tool_use message AND the next user tool_result together
+                i += 2  # Skip both this msg and the following tool_result msg
+                continue
+            elif has_tool_result:
+                # Orphaned tool_result with no tool_use — skip it
+                i += 1
+                continue
+            else:
+                # Plain text message — keep it
+                if isinstance(content, list):
+                    text_parts = [b.get("text", "") for b in content
+                                  if isinstance(b, dict) and b.get("type") == "text"]
+                    if text_parts:
+                        stripped.append({"role": msg["role"], "content": " ".join(text_parts)})
+                else:
+                    stripped.append(msg)
+                i += 1
+
     return stripped
 
-def save_conversation(session_id: str, messages: list):
+async def save_conversation(session_id: str, messages: list):
     path = os.path.join(CONVERSATIONS_DIR, f"{session_id}.json")
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    to_save = messages[-20:] if len(messages) > 20 else messages
-    with open(path, "w") as f:
-        json.dump(to_save, f)
+    
+    # Sanitize SDK objects before saving
+    to_save = []
+    for msg in (messages[-20:] if len(messages) > 20 else messages):
+        to_save.append({
+            "role": msg["role"],
+            "content": _sanitize_content(msg.get("content", ""))
+        })
+        
+    def _save():
+        with open(path, "w") as f:
+            json.dump(to_save, f)
+            
+    await asyncio.to_thread(_save)
 
 def guard_tokens(messages: list) -> list:
     estimated = sum(len(str(m.get("content", ""))) // 4 for m in messages)
@@ -745,28 +825,20 @@ async def chat_endpoint(req: ChatRequest):
             elif mood == "high":
                 yield dict(event="hud_update", data=json.dumps({"type": "mood", "state": "high"}))
 
-            BRIEFING_PHRASES = [
-                "brief me", "morning briefing", "what's my day",
-                "what do i have today", "run my briefing", "daily briefing"
-            ]
-            if any(p in user_message.lower() for p in BRIEFING_PHRASES):
-                import scheduler
-                await briefing_queue.put({"event": "proactive", "data": json.dumps({"autoSpeak": False, "text": "Triggering briefing"})}) 
-                # Schedule queue takes over
-                # Actually, the user asked to route to morning_briefing() directly
+            if user_message.lower().startswith("/brief"):
                 yield dict(event="message", data=json.dumps({"chunk": "*[Running briefing...]*\n"}))
                 text = await scheduler.compile_morning_briefing()
                 yield dict(event="message", data=json.dumps({"chunk": text}))
                 yield dict(event="message", data=json.dumps({"chunk": "\n[DONE]"}))
-                messages = load_conversation(session_id)
+                messages = await load_conversation(session_id)
                 messages.append({"role": "user", "content": user_message})
                 messages.append({"role": "assistant", "content": text})
-                save_conversation(session_id, messages)
+                await save_conversation(session_id, messages)
                 return
 
             memory = get_memory_truncated()
             system = build_system_prompt()
-            messages = load_conversation(session_id)
+            messages = await load_conversation(session_id)
             messages.append({"role": "user", "content": user_message})
             messages = guard_tokens(messages)
             
@@ -784,13 +856,21 @@ async def chat_endpoint(req: ChatRequest):
                 is_complex = any(k in user_message.lower() for k in COMPLEX_KEYWORDS)
                 current_max_tokens = 256 if iterations > 1 else (1024 if is_complex else 512)
                 
-                response = await client.messages.create(
-                    model="claude-haiku-4-5-20251001",
-                    max_tokens=current_max_tokens,
-                    system=system,
-                    tools=TOOLS,
-                    messages=messages
-                )
+                try:
+                    # Added timeout to prevent event loop hanging on bad model names or network issues
+                    response = await asyncio.wait_for(
+                        client.messages.create(
+                            model="claude-haiku-4-5-20251001",
+                            max_tokens=current_max_tokens,
+                            system=system,
+                            tools=TOOLS,
+                            messages=messages
+                        ),
+                        timeout=ANTHROPIC_TIMEOUT
+                    )
+                except asyncio.TimeoutError:
+                    yield dict(event="message", data=json.dumps({"error": "Tam is taking too long to think. Checking connection..."}))
+                    break
                 
                 log_cost(response)
                 
@@ -819,7 +899,7 @@ async def chat_endpoint(req: ChatRequest):
                         if block.type == "tool_use":
                             yield dict(event="message", data=json.dumps({"chunk": f"\n\n*[TAM ACTION] {block.name}...*\n\n"}))
                             
-                            res_payload = execute_tool(block.name, block.input)
+                            res_payload = await execute_tool(block.name, block.input)
                             tool_results.append({
                                 "type": "tool_result",
                                 "tool_use_id": block.id,
@@ -836,7 +916,7 @@ async def chat_endpoint(req: ChatRequest):
                 yield dict(event="message", data=json.dumps({"chunk": final_text}))
                 yield dict(event="message", data=json.dumps({"chunk": "[DONE]"}))
             
-            save_conversation(session_id, messages)
+            await save_conversation(session_id, messages)
 
         except Exception as e:
             traceback.print_exc()
@@ -847,14 +927,14 @@ async def chat_endpoint(req: ChatRequest):
 
 # Add GET /hud_data
 @app.get("/hud_data")
-def hud_data():
+async def hud_data():
     today = datetime.now().date().isoformat()
-    tasks = read_json(TASKS_FILE)
-    habits = read_json(HABITS_FILE)
-    workouts = read_json(WORKOUTS_FILE)
-    meals = read_json(MEALS_FILE)
-    study = read_json(STUDY_LOG_FILE)
-    reminders = [r for r in read_json(REMINDERS_FILE) if not r.get("fired")]
+    tasks = await read_json(TASKS_FILE)
+    habits = await read_json(HABITS_FILE)
+    workouts = await read_json(WORKOUTS_FILE)
+    meals = await read_json(MEALS_FILE)
+    study = await read_json(STUDY_LOG_FILE)
+    reminders = [r for r in await read_json(REMINDERS_FILE) if not r.get("fired")]
     
     gym_streak = calculate_consecutive_streak("gym", habits)
     
@@ -886,24 +966,34 @@ def hud_data():
 @app.get("/events")
 async def events_endpoint():
     async def event_generator():
-        last_keepalive = time.time()
         while True:
             try:
-                # Wait for msg but timeout to send keepalive
-                msg = await asyncio.wait_for(briefing_queue.get(), timeout=15.0)
-                yield dict(event=msg["event"], data=msg["data"])
+                # Use a combined wait for queue messages or a heartbeat timeout
+                msg = await asyncio.wait_for(briefing_queue.get(), timeout=20.0)
+                if isinstance(msg, dict) and "event" in msg and "data" in msg:
+                    yield msg
+                else:
+                    yield dict(event="proactive", data=json.dumps(msg))
             except asyncio.TimeoutError:
-                yield dict(event="proactive", data=": keepalive")
+                # Explicitly yield a keepalive that the browser understands
+                yield dict(event="ping", data=json.dumps({"time": time.time()}))
+            except Exception as e:
+                print(f"[EVENTS] Error in generator: {e}")
+                break
     return EventSourceResponse(event_generator())
 
 # Allow quick dashboard checks
 @app.get("/dashboard_pulse")
-def get_dashboard_pulse():
+async def get_dashboard_pulse():
     calendar = []
-    try: calendar = calendar_tools.get_today_events()
+    try: 
+        # Making these safe to avoid blocking
+        calendar = await asyncio.to_thread(calendar_tools.get_today_events)
     except: pass
+    
     emails = []
-    try: emails = gmail_tools.read_emails(max_results=3)
+    try: 
+        emails = await asyncio.to_thread(gmail_tools.read_emails, max_results=3)
     except: pass
     
     return {

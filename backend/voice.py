@@ -1,6 +1,6 @@
 from elevenlabs.client import ElevenLabs
 from fastapi.responses import StreamingResponse
-import os, io
+import os, io, asyncio
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -15,15 +15,18 @@ async def speak(request: SpeakRequest):
     if not api_key:
         return StreamingResponse(iter([]), media_type="audio/mpeg")
     
-    eleven = ElevenLabs(api_key=api_key)
-    try:
+    def generate_audio():
+        eleven = ElevenLabs(api_key=api_key)
         audio = eleven.text_to_speech.convert(
             text=request.text,
             voice_id="JBFqnCBsd6RMkjVDRZzb",  # George — clear, neutral
             model_id="eleven_turbo_v2_5",
             output_format="mp3_44100_128"
         )
-        audio_bytes = b"".join(audio)
+        return b"".join(audio)
+
+    try:
+        audio_bytes = await asyncio.to_thread(generate_audio)
         return StreamingResponse(
             io.BytesIO(audio_bytes),
             media_type="audio/mpeg",
