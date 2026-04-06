@@ -162,26 +162,7 @@ export default function App() {
     }
   };
 
-  const applyVocabFix = (transcript: string) => {
-    const corrections: Record<string, string> = {
-      'tom': 'Tam',
-      'Tom': 'Tam', 
-      'time': 'Tam',
-      'tan': 'Tam',
-      'tam tam': 'Tam',
-      'gym': 'gym',
-      'divyanshi': 'Divyanshi',
-      'hpml': 'HPML',
-      'columbia': 'Columbia',
-    };
-    
-    let fixed = transcript;
-    Object.entries(corrections).forEach(([wrong, right]) => {
-      const regex = new RegExp(`\\b${wrong}\\b`, 'gi');
-      fixed = fixed.replace(regex, right);
-    });
-    return fixed;
-  };
+
 
   const isSpeakingRef = useRef(false);
   const lastSpeakerEndRef = useRef(0);
@@ -198,22 +179,21 @@ export default function App() {
   }, []);
 
   const handleTranscript = useCallback((text: string) => {
-    const corrected = applyVocabFix(text);
-    const lower = corrected.toLowerCase();
+    const lower = text.toLowerCase();
     const hasWakeWord = lower.includes('tam') || lower.includes('tom') || lower.includes('time') || lower.includes('tan') || lower.includes('stop');
 
-    // MUTE WINDOW: While Tam is speaking, or within 2.5 seconds of her finishing (to allow echo 'isFinal' to flush out)
+    // MUTE WINDOW: While Tam is speaking, or within 2.5 seconds of her finishing
     const isEchoWindow = isSpeakingRef.current || (Date.now() - lastSpeakerEndRef.current < 2500);
 
-    if (corrected.trim()) {
+    if (text.trim()) {
         if (isEchoWindow) {
-             // In the echo window, we MUST require the wake word to prevent the infinite feedback loop!
+             // In the echo window, we MUST require the wake word
              if (hasWakeWord) {
-                 handleSendMessage(corrected);
+                 handleSendMessage(text);
              }
         } else {
-             // OUTSIDE echo window, the mic is naturally open for normal fluid conversational replies!
-             handleSendMessage(corrected);
+             // OUTSIDE echo window
+             handleSendMessage(text);
         }
     }
   }, [sessionId]);

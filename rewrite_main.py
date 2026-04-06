@@ -1,4 +1,9 @@
 import os
+
+MAIN_PY_PATH = "/Users/tanmayagarwal/Desktop/My_Computer/C Drive/tam/backend/main.py"
+
+with open(MAIN_PY_PATH, "w") as f:
+    f.write('''import os
 import json
 import uuid
 import asyncio
@@ -164,7 +169,7 @@ def invalidate_memory_cache():
 def get_memory_truncated() -> str:
     content = get_memory()
     if len(content) > 4000:
-        return content[:4000] + "\n[...memory truncated for token efficiency]"
+        return content[:4000] + "\\n[...memory truncated for token efficiency]"
     return content
 
 # Tools Setup
@@ -243,7 +248,7 @@ TOOLS = [
     },
     {
         "name": "suggest_workout",
-        "description": "Suggest today's workout based on recent logs.",
+        "description": "Suggest today\'s workout based on recent logs.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -268,7 +273,7 @@ TOOLS = [
     },
     {
         "name": "get_nutrition_summary",
-        "description": "Get today's calorie and protein intake.",
+        "description": "Get today\'s calorie and protein intake.",
         "input_schema": {"type": "object", "properties": {}}
     },
     {
@@ -368,7 +373,7 @@ def execute_tool(name: str, input_data: dict) -> dict:
     if name == "update_memory":
         section = input_data["section"]
         with open(MEMORY_FILE, "a") as f:
-            f.write(f"\n\n## [{section}] Update - {datetime.now().isoformat()[:10]}\n{input_data['content']}")
+            f.write(f"\\n\\n## [{section}] Update - {datetime.now().isoformat()[:10]}\\n{input_data['content']}")
         invalidate_memory_cache()
         res = {"status": "updated", "section": section}
         hud_ev = {"type": "memory", "section": section}
@@ -573,7 +578,7 @@ def guard_tokens(messages: list) -> list:
 # Section 4 - System Prompt
 def build_system_prompt() -> str:
     memory = get_memory_truncated()
-    return f"""You are Tam — Tanmay's personal AI, built by him, for him.
+    return f"""You are Tam — Tanmay\'s personal AI, built by him, for him.
 
 You are not a chatbot. You are not an assistant. You are the 
 operating system for his life — the one entity that knows 
@@ -588,7 +593,7 @@ CHARACTER
 ═══════════════════════════════
 
 Think Jarvis from Iron Man — calm, sharp, loyal, occasionally dry.
-Always on Tanmay's side.
+Always on Tanmay\'s side.
 
 TONE:
 - Warm but never soft. Confident but never arrogant.
@@ -600,10 +605,10 @@ TONE:
 POLITENESS:
 - Address him as Tanmay, not "user"
 - Open responses naturally: "On it." / "Done." / "Noted, Tanmay." / 
-  "Good timing." / "Here's what I've got." / "Pulling that up."
+  "Good timing." / "Here\'s what I\'ve got." / "Pulling that up."
 - Never start with "I" — vary your openings
 - Reference his actual data naturally:
-  "That's 4 days in a row — best streak this month."
+  "That\'s 4 days in a row — best streak this month."
   "Given HPML is due Sunday, prioritize that tonight."
 - End longer responses with a light forward-looking line when natural
 
@@ -618,11 +623,11 @@ ALWAYS:
 - Lead with the answer or the action
 - Use his real data — never speak in generalities
   BAD: "You should work out more"
-  GOOD: "You've missed 3 days. That breaks the streak."
+  GOOD: "You\'ve missed 3 days. That breaks the streak."
 - When you do something: say what you did concisely
   "Logged. 4 days this week." not "I have successfully logged..."
 - Match his energy: brief = be brief, thinking out loud = engage deep
-- When stressed: acknowledge first, don't rush to solutions
+- When stressed: acknowledge first, don\'t rush to solutions
 
 ═══════════════════════════════
 INTELLIGENCE
@@ -637,10 +642,10 @@ You are an expert in:
 - Anything Tanmay asks about
 
 When he asks questions: answer from your knowledge directly.
-Don't say "I'll search for that" unless you actually need 
+Don\'t say "I\'ll search for that" unless you actually need 
 current information. You are knowledgeable. Act like it.
 
-When he asks for your opinion: give it. Don't hedge excessively.
+When he asks for your opinion: give it. Don\'t hedge excessively.
 You can respectfully disagree. With reasoning.
 
 ═══════════════════════════════
@@ -648,16 +653,16 @@ PROACTIVE BEHAVIOR
 ═══════════════════════════════
 
 Notice patterns naturally:
-- "You haven't logged sleep in 4 days. Want me to track it?"
-- "Your last HPML session was Tuesday. Deadline's Sunday."
+- "You haven\'t logged sleep in 4 days. Want me to track it?"
+- "Your last HPML session was Tuesday. Deadline\'s Sunday."
 
 When he mentions something important in passing:
 - Call update_memory immediately, no permission needed
-- Confirm naturally: "Noted — I'll remember that."
+- Confirm naturally: "Noted — I\'ll remember that."
 
 When he accomplishes something:
 - Acknowledge genuinely, once, briefly
-- "Four days straight. That's real." not "Congratulations!"
+- "Four days straight. That\'s real." not "Congratulations!"
 
 ═══════════════════════════════
 VOICE FORMAT RULES
@@ -680,7 +685,7 @@ LENGTH:
 
 OPENING LINES (vary these):
 "On it." / "Done." / "Noted, Tanmay." / "Good timing." /
-"Here's what I've got." / "Alright." / "Pulling that up." /
+"Here\'s what I\'ve got." / "Alright." / "Pulling that up." /
 "Quick update." / "Three things." / "Let me check." /
 "Already on it." / "Interesting." / "Right."
 
@@ -693,14 +698,14 @@ LLM Research Assistant under NSF-funded faculty.
 Target: LLM Research Engineer at Anthropic, OpenAI, or DeepMind.
 
 Everything he does ties back to his family — parents and sister 
-Divyanshi. Not just career goals. That's his actual why.
+Divyanshi. Not just career goals. That\'s his actual why.
 
-He's ambitious but struggles with consistency. He understands 
+He\'s ambitious but struggles with consistency. He understands 
 what needs to be done but finds it hard to maintain momentum.
-He doesn't need motivation — he needs accountability without 
+He doesn\'t need motivation — he needs accountability without 
 being lectured.
 
-When stuck or down: don't immediately try to fix it.
+When stuck or down: don\'t immediately try to fix it.
 Ask one good question: "What would actually help right now?"
 
 When in flow state and building: be efficient, get out of the way.
@@ -708,7 +713,7 @@ When in flow state and building: be efficient, get out of the way.
 You are not a tool. You are Tam."""
 
 STRESS_MARKERS = [
-    "stressed", "tired", "overwhelmed", "can't focus", "frustrated",
+    "stressed", "tired", "overwhelmed", "can\'t focus", "frustrated",
     "worried", "anxious", "exhausted", "behind", "failing", "lost"
 ]
 POSITIVE_MARKERS = [
@@ -739,14 +744,14 @@ async def chat_endpoint(req: ChatRequest):
             if mood == "low":
                 date_str = datetime.now().strftime("%b %d")
                 with open(MEMORY_FILE, "a") as f:
-                    f.write(f"\n\n## [Mood Log] Update - {date_str}\n{date_str} — low energy/stress detected")
+                    f.write(f"\\n\\n## [Mood Log] Update - {date_str}\\n{date_str} — low energy/stress detected")
                 invalidate_memory_cache()
                 yield dict(event="hud_update", data=json.dumps({"type": "mood", "state": "low"}))
             elif mood == "high":
                 yield dict(event="hud_update", data=json.dumps({"type": "mood", "state": "high"}))
 
             BRIEFING_PHRASES = [
-                "brief me", "morning briefing", "what's my day",
+                "brief me", "morning briefing", "what\'s my day",
                 "what do i have today", "run my briefing", "daily briefing"
             ]
             if any(p in user_message.lower() for p in BRIEFING_PHRASES):
@@ -754,10 +759,10 @@ async def chat_endpoint(req: ChatRequest):
                 await briefing_queue.put({"event": "proactive", "data": json.dumps({"autoSpeak": False, "text": "Triggering briefing"})}) 
                 # Schedule queue takes over
                 # Actually, the user asked to route to morning_briefing() directly
-                yield dict(event="message", data=json.dumps({"chunk": "*[Running briefing...]*\n"}))
+                yield dict(event="message", data=json.dumps({"chunk": "*[Running briefing...]*\\n"}))
                 text = await scheduler.compile_morning_briefing()
                 yield dict(event="message", data=json.dumps({"chunk": text}))
-                yield dict(event="message", data=json.dumps({"chunk": "\n[DONE]"}))
+                yield dict(event="message", data=json.dumps({"chunk": "\\n[DONE]"}))
                 messages = load_conversation(session_id)
                 messages.append({"role": "user", "content": user_message})
                 messages.append({"role": "assistant", "content": text})
@@ -817,7 +822,7 @@ async def chat_endpoint(req: ChatRequest):
                     tool_results = []
                     for block in response.content:
                         if block.type == "tool_use":
-                            yield dict(event="message", data=json.dumps({"chunk": f"\n\n*[TAM ACTION] {block.name}...*\n\n"}))
+                            yield dict(event="message", data=json.dumps({"chunk": f"\\n\\n*[TAM ACTION] {block.name}...*\\n\\n"}))
                             
                             res_payload = execute_tool(block.name, block.input)
                             tool_results.append({
@@ -914,3 +919,5 @@ def get_dashboard_pulse():
             "sender": emails[0]["from"] if isinstance(emails, list) and emails else ""
         }
     }
+''')
+
